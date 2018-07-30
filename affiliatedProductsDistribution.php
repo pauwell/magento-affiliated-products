@@ -79,7 +79,7 @@
 	
 	// -- End script content -------------------------------------------------------------
 	
-	// Measure time.
+	// Measure time. 
 	$time = round((microtime(true) - $start), 2);
 	echo "<hr>Success! Script took <b>$time</b> seconds to execute!<hr>";
 ?>
