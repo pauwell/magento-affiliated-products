@@ -1,4 +1,4 @@
-<?php
+<?php 
 	ini_set("memory_limit","512M");
 	date_default_timezone_set("Europe/Berlin");
 	define('MAGENTO_ROOT', '/var/www/vhosts/leds-com.de/magento');
