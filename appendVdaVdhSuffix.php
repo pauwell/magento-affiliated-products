@@ -1,7 +1,7 @@
 <?php 
 	ini_set("memory_limit","512M");
 	date_default_timezone_set("Europe/Berlin");
-	define('MAGENTO_ROOT', '/var/www/vhosts/leds-com.de/magento');
+	define('MAGENTO_ROOT', 'xxx/xxx/xxx');
 
 	$compilerConfig = MAGENTO_ROOT . '/includes/config.php';
 	if(file_exists($compilerConfig)){ include $compilerConfig; }
