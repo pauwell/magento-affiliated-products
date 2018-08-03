@@ -1,12 +1,12 @@
 <?php
-	/*	In allen Artikeln soll das 'System' auswählbar sein durch ein Multiselect.
+	/*	In allen Artikeln soll das 'System' auswählbar sein (Atria, Spider etc.) durch ein Multiselect.
 		Basierend auf dieser Auswahl werden nun alle Artikel mit dem selben System zur Zubehör-Liste hinzugefügt.
 		Als Skript, um alle alten Artikel auf den neuen Stand zu bringen. */
 
 	// Prepare magento for script execution.
 	ini_set("memory_limit","512M");
 	date_default_timezone_set("Europe/Berlin");
-	define('MAGENTO_ROOT', '/xxx/xxx/xxx');
+	define('MAGENTO_ROOT', '/var/www/vhosts/rs213855.rs.hosteurope.de/dev3_new');
 	$compilerConfig = MAGENTO_ROOT . '/includes/config.php';
 	if(file_exists($compilerConfig)){ include $compilerConfig; }
 	$mageFilename = MAGENTO_ROOT . '/app/Mage.php';
@@ -48,14 +48,6 @@
 	foreach($collection as $_product){
 		if($_product !== ""){		
 			$product_id = $_product->getId(); // Fetch the id from product.
-			
-			// @ Test (Remove later. Just try with one item right now.)
-			if($product_id != '124' && $product_id != '445' && $product_id != '4038' && $product_id != '371' && $product_id != '3405'
-			 && $product_id != '7' && $product_id != '434' && $product_id != '108' && $product_id != '3425' && $product_id != '3427'
-			 && $product_id != '3426' && $product_id != '58' && $product_id != '3433' && $product_id != '3428' && $product_id != '3434'
-			 && $product_id != '3429' && $product_id != '3430' && $product_id != '3431' && $product_id != '3432' && $product_id != '3487'
-			 && $product_id != '55' && $product_id != '371' && $product_id != '445' && $product_id != '434' && $product_id != '108' && $product_id != '3425'
-			 && $product_id != '3426' && $product_id != '3427' && $product_id != '3405' && $product_id != '4038'  && $product_id != '40') continue;
 			 
 			$product = Mage::getModel('catalog/product')->setStoreId(0)->load($product_id); // Load the 'real' product.
 			$lampsystem = explode(',', $product->getLampensystem());	// Get possible lampsystems from this product.
@@ -83,8 +75,7 @@
 				// Check if this product can be added as 'Zubehör'. zubehoer_berechtigt = 'Yes' ?
 				if($product->getAttributeText('zubehoer_berechtigt') === 'Yes'){
 					
-					// DUMP ZUBEHÖR
-					var_dump($product->getAttributeText('zubehoer_berechtigt'));
+					//var_dump($product->getAttributeText('zubehoer_berechtigt'));
 					
 					// Calculate position here based on cable length and ballast unit.
 					$lichtstrom   = $product->getLichtstrom();				// Lichtstrom (Leuchtmittel)
@@ -130,14 +121,6 @@
 		
 			$product_id = $_product->getId(); // Fetch the id from product.
 			
-			// @ Test (Remove later. Just try with one item right now.)
-			if($product_id != '124' && $product_id != '445' && $product_id != '4038' && $product_id != '371' && $product_id != '3405'
-			 && $product_id != '7' && $product_id != '434' && $product_id != '108' && $product_id != '3425' && $product_id != '3427'
-			 && $product_id != '3426' && $product_id != '58' && $product_id != '3433' && $product_id != '3428' && $product_id != '3434'
-			 && $product_id != '3429' && $product_id != '3430' && $product_id != '3431' && $product_id != '3432' && $product_id != '3487'
-			 && $product_id != '55' && $product_id != '371' && $product_id != '445' && $product_id != '434' && $product_id != '108' && $product_id != '3425'
-			 && $product_id != '3426' && $product_id != '3427' && $product_id != '3405' && $product_id != '4038' && $product_id != '40') continue;
-			
 			$product = Mage::getModel('catalog/product')->setStoreId(0)->load($product_id); // Load the 'real' product.
 			$lampsystem = explode(',', $product->getLampensystem());	// Get possible lampsystems from this product.
 		
@@ -172,7 +155,7 @@
 					$isIlluminant = false; 
 					$isLeuchte = false;
 					echo "Category IDs:<br>";
-					var_dump($categoryIds);
+					//var_dump($categoryIds);
 					foreach($allCategories as $cat) {
 						//echo "Found category: $cat<br>";
 						$cats[$cat->getId()] = $cat->getName();
@@ -197,31 +180,64 @@
 						echo "Insert 'position' => " . $position;
 						$related_data[$related_id] = array('position' => $position);  
 						echo "<br>Inserted " . print_r($related_data);
-					} 
+					}else{
+						$position = $affiliatedPositions[$related_id];
+						echo "<p>Affiliated product with $related_id found! Position is $position, Ist Kabel: $isCable," 
+						."Ist Vorschaltgerät: $isBallast, Ist Leuchtmittel: $isIlluminant, Leuchte: $isLeuchte</p>";			
+						echo "Insert 'position' => " . $position;
+						$related_data[$related_id] = array('position' => $position);  
+						echo "<br>Inserted " . print_r($related_data);
+					}
 				}
 				
 				// If not 'W' or 'WW', just add.
 				if($sku_suffix !== '0'){ 
+				
+					//var_dump($affiliatedProducts[$sys]);
+				
 					foreach($affiliatedProducts[$sys]['0'] as $index => $related_id){
-						
 						// Do not add itself to its own affiliated products.
-						if($product->getEntityId() === $related_id){
-							continue;
-						}
-						
+						if($product->getEntityId() === $related_id){ continue; }
 						
 						$position = $affiliatedPositions[$related_id];
 						echo "<br>Insert 'position' => " . $position;
 						$related_data[$related_id] = array('position' => $position); 
+						//var_dump($related_data[$related_id]);
 					}
-				} 
+				}else{
+					// If 'W' or 'WW', just add 
+					foreach($affiliatedProducts[$sys]['w'] as $index => $related_id){
+
+						// Do not add itself to its own affiliated products.
+						if($product->getEntityId() === $related_id){ continue; }
+						
+						// Set position.
+						$position = $affiliatedPositions[$related_id];
+						echo "<br>Insert 'position' => " . $position;
+						$related_data[$related_id] = array('position' => $position); 
+					}
+					
+					foreach($affiliatedProducts[$sys]['ww'] as $index => $related_id){
+		
+						// Do not add itself to its own affiliated products.
+						if($product->getEntityId() === $related_id){ continue; }
+					
+						// Set position.
+						$position = $affiliatedPositions[$related_id];
+						echo "<br>Insert 'position' => " . $position;
+						$related_data[$related_id] = array('position' => $position); 
+					}
+				}
 				echo "</i></li>";
 			} echo "</ul></fieldset>";
 			
 			// Only update if the related products have changed.
 			$isChanged = false;
 			$relatedProducts = $product->getRelatedProducts();
+			//var_dump($relatedProducts);
+			echo "<h1>TEST IF RELATED WERE FOUND:</h1>";
 			if(!empty($relatedProducts)){
+				echo "<h1>RELATED PRODUCTS FOUND</h1>";
 				foreach($relatedProducts as $prod){
 					if($related_data[$prod->getId()] !== null){
 						echo "<h1>WARNING! changes detected!</h1>";
@@ -233,10 +249,6 @@
 				
 				// Detect changes and update.
 				if(true){  // Uncomment to check for changes: if($isChanged === true){	
-					// Debug output.
-					echo "Is changed => ";
-					var_dump($related_data);
-					echo "<br>";
 					
 					// Save to product if there are changes.
 					Mage::getResourceModel('catalog/product_link')->saveProductLinks(
@@ -244,13 +256,15 @@
 					);
 				}
 			}else{
-				// Debug output of the related products.
-				echo "<h3>No affiliated products found for product $related_id</h3>";
+				// Save to product if there are changes.
+				Mage::getResourceModel('catalog/product_link')->saveProductLinks(
+					$product, $related_data, Mage_Catalog_Model_Product_Link::LINK_TYPE_RELATED
+				);
 			}
 			
 			// Debug output.
 			echo "<hr><h3>Output:</h3>";
-			var_dump($related_data);
+			//var_dump($related_data);
 			echo "<hr>";
 		}
 	}
