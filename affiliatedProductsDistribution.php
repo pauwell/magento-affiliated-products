@@ -2,11 +2,9 @@
 	// Introduce script.
 	echo "<meta charset='utf-8'>";
 	echo "Script '".__FILE__."' running...<hr>";
-	
-	// Prepare magento for script execution.
 	ini_set("memory_limit","512M");
 	date_default_timezone_set("Europe/Berlin");
-	define('MAGENTO_ROOT', '/var/www/vhosts/rs213855.rs.hosteurope.de/dev3_new');
+	define('MAGENTO_ROOT', 'XXX');
 	$compilerConfig = MAGENTO_ROOT . '/includes/config.php';
 	if(file_exists($compilerConfig)){ include $compilerConfig; }
 	$mageFilename = MAGENTO_ROOT . '/app/Mage.php';
@@ -14,8 +12,6 @@
 	Mage::init();
 	Mage::app()->getStore()->setConfig('catalog/frontend/flat_catalog_product', 0);
 	Mage::app()->getCacheInstance()->banUse('translate');	
-	
-	// Start execution-time measuring.
 	$start = microtime(true);
 	
 	// Sammlung aller Artikel.
@@ -31,11 +27,6 @@
 		// Artikel aus der DB holen.
 		if($_product === "") continue;
 		$productId = $_product->getId(); 												// Richtige ID.															
-		
-		// XXXXXXXXXXXXXXXXXXXX
-		if($productId == 2167 || $productId == 2158 || $productId == 3339 || $productId == 5585 || $productId == 357 || $productId == 370 || $productId == 444 || $productId == 380 || $productId == 141 || $productId == 1667 || $productId == 3341 || $productId == 5648 || $productId == 6642 || $productId == 446){}else continue;
-		// XXXXXXXXXXXXXXXXXXXX
-		
 		$product = Mage::getModel('catalog/product')->setStoreId(0)->load($productId);	// Richtiger Artikel.
 		
 		// Eckdaten.
@@ -95,11 +86,6 @@
 		// Artikel aus der DB holen.
 		if($_product === "") continue;
 		$productId = $_product->getId(); // Richtige ID.
-	
-		// XXXXXXXXXXXXXXXXXXXX
-		if($productId == 2167 || $productId == 2158 || $productId == 3339 || $productId == 5585 || $productId == 357 || $productId == 370 || $productId == 444 || $productId == 380 || $productId == 141 || $productId == 1667 || $productId == 3341 || $productId == 5648 || $productId == 6642 || $productId == 446){}else continue;
-		// XXXXXXXXXXXXXXXXXXXX
-		
 		$product = Mage::getModel('catalog/product')->setStoreId(0)->load($productId);	// Richtiger Artikel.
 		
 		// Eckdaten.
@@ -147,32 +133,11 @@
 				$alleKategorienGleich = count(array_diff($zubehoerElem['system'], $lampensystem)) == 0;
 				if($alleKategorienGleich == true){
 					$zubehoerDaten[$zubehoerIdx] = array('position' => $zubehoerElem['position']);
-				}
-				
-				echo "<p><b>Systeme des aktuellen Artikels: </b>";
-				var_dump($lampensystem);
-				echo "</p><p><b>Systeme des aktuellen Zubehörs: </b>";
-				var_dump($zubehoerElem['system']);
-				echo "</p>";
-				echo "<p><b>Alle Kategorien gleich: </b>";
-				var_dump($alleKategorienGleich);
-				echo "</p><hr>";
-				
+				}	
 			}else{
-				
-				echo "FOUND:<ul><li>";
-				var_dump($zubehoerElem['system']);
-				echo "</li><li>";
-				var_dump($lampensystem);
-				echo "</li><li>Difference";
-				var_dump(count(array_diff($zubehoerElem['system'], $lampensystem)));
-				echo "</li></ul>";
-				
 				// Ansonsten einfach passend hinzugefügen:
 				if($farbEndung == $zubehoerElem['farbe'] && count(array_diff($zubehoerElem['system'], $lampensystem)) == 0){
 					$zubehoerDaten[$zubehoerIdx] = array('position' => $zubehoerElem['position']);
-					
-					echo "<p><b>NEU!</b></p>";
 				}				
 			}
 		}
