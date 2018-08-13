@@ -1,14 +1,10 @@
 <?php
-	/*	In allen Artikeln soll das 'System' auswählbar sein (Atria, Spider etc.) durch ein Multiselect.
-		Basierend auf dieser Auswahl werden nun alle Artikel mit dem selben System zur Zubehör-Liste hinzugefügt.
-		Als Skript, um alle alten Artikel auf den neuen Stand zu bringen. 
-        
-        @Paul Bernitz
-        @2018
-    */
-    
+	// Introduce script.
+	echo "<meta charset='utf-8'>";
+	echo "Script '".__FILE__."' running...<hr>";
+	
 	// Prepare magento for script execution.
-    ini_set("memory_limit","512M");
+	ini_set("memory_limit","512M");
 	date_default_timezone_set("Europe/Berlin");
 	define('MAGENTO_ROOT', '/var/www/vhosts/rs213855.rs.hosteurope.de/dev3_new');
 	$compilerConfig = MAGENTO_ROOT . '/includes/config.php';
@@ -17,200 +13,181 @@
 	require_once($mageFilename);
 	Mage::init();
 	Mage::app()->getStore()->setConfig('catalog/frontend/flat_catalog_product', 0);
-	Mage::app()->getCacheInstance()->banUse('translate');
+	Mage::app()->getCacheInstance()->banUse('translate');	
 	
-	// For better visual feedback.
-	echo "<meta charset='utf-8'>
-		<style>
-			*{ font-family: consolas; }
-			table{ border-collapse: collapse; }
-			tr, td{ border: 1px solid lightgray; padding: 5px; }
-			h1,h2,h3{ background: lightgray; }
-			legend{ font-size: 1.5em; }
-			fieldset{ margin-top: 20px; }
-		</style>";
+	// Start execution-time measuring.
+	$start = microtime(true);
 	
-	// Show a short message that the script started running.
-	echo "Script '".__FILE__."' running...<hr>";
-		
-	// Receive a collection of all products.
+	// Sammlung aller Artikel.
 	$collection = Mage::getModel('catalog/product')
 		->getCollection()
 		->addAttributeToSelect('up_sell_product_grid_table')
-		->load();	
-		
-	// Start execution-time measuring
-	$start = microtime(true);
+		->load();
 	
-	// ------------------------------------------------------------------------------------------------------------------------------------------
-	/* 	Iterate over each product and save its id to the array with all all affiliated products.
-		Please note: Split between 'W' and 'WW', too. */ 
-	$affiliatedProducts = array();
-	$affiliatedPositions = array();
+	// -- Alle Artikel durchgehen und deren Position und Typ speichern --------------------------------------------------
+	$neueZubehoerArtikel = array();
 	foreach($collection as $_product){
-		if($_product !== ""){		
-			$product_id = $_product->getId(); // Fetch the id from product.
-			 
-			$product = Mage::getModel('catalog/product')->setStoreId(0)->load($product_id); // Load the 'real' product.
-			$lampsystem = explode(',', $product->getLampensystem());	// Get possible lampsystems from this product.
-			
-			$sku_suffix = end(explode('-', $product->getSku()));// Check if white/warmwhite/none
-			if($sku_suffix == 'W') $sku_suffix = 'w';			// Suffix 'w'
-			else if($sku_suffix == 'WW') $sku_suffix = 'ww';	// Suffix 'ww'
-			else $sku_suffix = '0';								// Suffix '0' (None)
-			
-			// Go through each lampsystem of the product and put it in a list with the corresponding product id's.
-			foreach($lampsystem as $sys){	
-				if(empty($sys)){
-					continue; // Skip if no lampsystem.
-				}
-				
-                // Create an array for every new system.
-				if(!array_key_exists($sys, $affiliatedProducts)){
-					$affiliatedProducts[$sys] = array(); 
-					array_push($affiliatedProducts[$sys], array());
-				}
-				
-				// Check if this product can be added as 'Zubehör'. zubehoer_berechtigt = 'Yes' ?
-				if($product->getAttributeText('zubehoer_berechtigt') === 'Yes'){
 		
-					// Calculate position here based on cable length and ballast unit.
-					$lichtstrom   = $product->getLichtstrom();				// Lichtstrom (Leuchtmittel)
-					$cable_length = $product->getKabellaenge() * 10;		// Kabellänge (Kabel)
-					$ballast_unit = $product->getAusgangsleistungVgeraet();	// Watt (Vorschaltgerät)
-					
-					$price = number_format($product->getPrice(), 0);	
-					$position = $price;
-					if(!empty($lichtstrom)){ $position = $lichtstrom; }
-					else if(!empty($cable_length)){ $position = $cable_length; }
-					else if(!empty($ballast_unit)){ $position = $ballast_unit; }
-					
-					$position = intval($position);
-					$affiliatedPositions[$product_id] = $position;
-					$affiliatedProducts[$sys][$sku_suffix][] = $product_id; // Append to list of affiliated products.
+		// Artikel aus der DB holen.
+		if($_product === "") continue;
+		$productId = $_product->getId(); 												// Richtige ID.															
+		
+		// XXXXXXXXXXXXXXXXXXXX
+		if($productId == 2167 || $productId == 2158 || $productId == 3339 || $productId == 5585 || $productId == 357 || $productId == 370 || $productId == 444 || $productId == 380 || $productId == 141 || $productId == 1667 || $productId == 3341 || $productId == 5648 || $productId == 6642 || $productId == 446){}else continue;
+		// XXXXXXXXXXXXXXXXXXXX
+		
+		$product = Mage::getModel('catalog/product')->setStoreId(0)->load($productId);	// Richtiger Artikel.
+		
+		// Eckdaten.
+		$lampensystem = explode(',', $product->getLampensystem()); 						// Kategorien auslesen.
+		$farbEndung = end(explode('-', $product->getSku())); 							// Farbendung auslesen (W, WW, B).
+		$farbEndung = $farbEndung != 'W' && $farbEndung != 'WW' && $farbEndung != 'B' ? '0' : $farbEndung; 
+		$isZubehoerBerechtigt = $product->getAttributeText('zubehoer_berechtigt');		// Ist das Produkt ein Zubehör-Artikel.
+		if($isZubehoerBerechtigt == false) continue;									// Überspringen falls kein Zubehör-Artikel.
+		
+		// Position des Artikels berechnen, basierend auf der Kategorie.
+		$preis = number_format($product->getPrice(), 0);								// Setze die Position gleich dem Preis.
+		$lichtstrom = $product->getLichtstrom();										// Lichtstrom messen
+		$kabelLaenge= $product->getKabellaenge() * 10;									// Länge des Kabels (x10). 
+		$ausgangsleistung = $product->getAusgangsleistungVgeraet();						// Watt Ausgangsleistung.
+		$position = $preis;
+		
+		// Kategorien auslesen und konvertieren.
+		$kategorien = Mage::getModel('catalog/category')->getCollection()->addAttributeToSelect('name');
+		$kategorienIds = $_product->getCategoryIds();
+		$hauptKategorie = "";
+		foreach($kategorien as $katIdx => $katElem){
+			if(empty($hauptKategorie) && in_array($katElem->getId(), $kategorienIds)){
+				if(stripos("-".$katElem->getName(), "leucht")){
+					$hauptKategorie = "Leuchte";
+					$position = $lichtstrom;
+				}else if(stripos("-".$katElem->getName(), "lamp")){
+					$hauptKategorie = "Lampen"; 
+				}else if(stripos("-".$katElem->getName(), "kabel")){
+					$hauptKategorie = "Kabel";
+					$position = $kabelLaenge;
+				}else if(stripos("-".$katElem->getName(), "vorschalt")){
+					$hauptKategorie = "Vorschaltgerät";
+					$position = $ausgangsleistung;
 				}
 			}
 		}
+		if(empty($hauptKategorie)){ $hauptKategorie = "Sonstiges"; }
+		
+		// Speichere die Werte in den neuen Zubehör-Artikeln.
+		$neueZubehoerArtikel[$productId] = Array(
+			"system" => $lampensystem,				// Das System des Artikels als Zahlwert.
+			"position" => $position,				// Position innerhalb des Zubehör Registers.
+			"farbe" => $farbEndung,					// Weiß, Warmweiß, Blau, Normal
+			"Kategorie" => $hauptKategorie			// Kategorie (Leuchte, Zubehör, Lampe etc)
+		);
+		
+		// Debug print.
+		echo "<h3>Artikel ".$product->getSku()." mit ID [$productId] als Zubehör hinzugefügt</h3>";
+		echo "<pre>".print_r($neueZubehoerArtikel[$productId], 1)."</pre>";
+		echo "<hr>";
 	}
+	echo "<hr>";
 	
-	// ------------------------------------------------------------------------------------------------------------------------------------------
-	/* 	Now that all affiliated products are collected and saved locally for reference,	
-		the product collection has to be checked again to insert the specified affiliated products. */
+	// -- Alle Artikel durchgehen und die gesammelten Positionen als Zubehör hinzufügen ---------------------------------
 	foreach($collection as $_product){
-		if($_product !== ""){	
 		
-			$product_id = $_product->getId(); // Fetch the id from product.
+		// Artikel aus der DB holen.
+		if($_product === "") continue;
+		$productId = $_product->getId(); // Richtige ID.
+	
+		// XXXXXXXXXXXXXXXXXXXX
+		if($productId == 2167 || $productId == 2158 || $productId == 3339 || $productId == 5585 || $productId == 357 || $productId == 370 || $productId == 444 || $productId == 380 || $productId == 141 || $productId == 1667 || $productId == 3341 || $productId == 5648 || $productId == 6642 || $productId == 446){}else continue;
+		// XXXXXXXXXXXXXXXXXXXX
+		
+		$product = Mage::getModel('catalog/product')->setStoreId(0)->load($productId);	// Richtiger Artikel.
+		
+		// Eckdaten.
+		$lampensystem = explode(',', $product->getLampensystem()); 						// Kategorien auslesen.
+		$farbEndung = end(explode('-', $product->getSku())); 							// Farbendung auslesen (W, WW, B).
+		$farbEndung = $farbEndung != 'W' && $farbEndung != 'WW' && $farbEndung != 'B' ? '0' : $farbEndung; 
+		$isZubehoerBerechtigt = $product->getAttributeText('zubehoer_berechtigt');		// Ist das Produkt ein Zubehör-Artikel.
+		
+		// Artikeleigenschaften sammeln.
+		$preis = number_format($product->getPrice(), 0);								// Setze die Position gleich dem Preis.
+		$lichtstrom = $product->getLichtstrom();										// Lichtstrom messen
+		$kabelLaenge= $product->getKabellaenge() * 10;									// Länge des Kabels (x10). 
+		$ausgangsleistung = $product->getAusgangsleistungVgeraet();						// Watt Ausgangsleistung.
+		
+		// Kategorien auslesen und konvertieren.
+		$kategorien = Mage::getModel('catalog/category')->getCollection()->addAttributeToSelect('name');
+		$kategorienIds = $_product->getCategoryIds();
+		$hauptKategorie = "";
+
+		foreach($kategorien as $katIdx => $katElem){
+			if(empty($hauptKategorie) && in_array($katElem->getId(), $kategorienIds)){
+				if(stripos("-".$katElem->getName(), "leucht")){
+					$hauptKategorie = "Leuchte";
+				}else if(stripos("-".$katElem->getName(), "lamp")){
+					$hauptKategorie = "Lampen"; 
+				}else if(stripos("-".$katElem->getName(), "kabel")){
+					$hauptKategorie = "Kabel";
+				}else if(stripos("-".$katElem->getName(), "vorschalt")){
+					$hauptKategorie = "Vorschaltgerät";
+					$position = $ausgangsleistung;
+				}
+			}
+		}
+		if(empty($hauptKategorie)){ $hauptKategorie = "Sonstiges"; }
+		
+		echo "<fieldset><legend><b>Test ".$product->getSku()." [$productId], $hauptKategorie, $farbEndung</b></legend>";
+		
+		// Alle Zubehörartikel durchgehen.
+		$zubehoerDaten = array();
+		foreach($neueZubehoerArtikel as $zubehoerIdx => $zubehoerElem){
 			
-			$product = Mage::getModel('catalog/product')->setStoreId(0)->load($product_id); // Load the 'real' product.
-			$lampsystem = explode(',', $product->getLampensystem());	// Get possible lampsystems from this product.
-		
-			$sku_suffix = end(explode('-', $product->getSku()));// Check if white/warmwhite/none
-			if($sku_suffix == 'W') $sku_suffix = 'w';			// Suffix 'w'
-			else if($sku_suffix == 'WW') $sku_suffix = 'ww';	// Suffix 'ww' 
-			else $sku_suffix = '0';								// Suffix '0' (None)	
-
-			$related_data = array();
-			foreach($lampsystem as $sys){
-                
-				/* 1.This is how you access the related children: 
-				  [System (595,592)] [Endung ('0', 'w', 'ww')] [Index (0,1,2)] */
-				foreach($affiliatedProducts[$sys][$sku_suffix] as $index => $related_id){
-					if($product->getEntityId() === $related_id){
-						continue;				
-					}					
-					
-					// Set position value based on attribute.
-					$allCategories = Mage::getModel('catalog/category')->getCollection()->addAttributeToSelect('name');
-					$categoryIds = $_product->getCategoryIds();
-					$cats = null;
-					$isCable = false;
-					$isBallast = false;
-					$isIlluminant = false; 
-					$isLeuchte = false;
-					foreach($allCategories as $cat) {
-						$cats[$cat->getId()] = $cat->getName();
-						if($cat->getName() == "Kabel" && in_array($cat->getId(), $categoryIds)){ $isCable = true; }
-						else if($cat->getName() == "Vorschaltgeräte" && in_array($cat->getId(), $categoryIds)){ $isBallast = true; }
-						if(strpos($cat->getName(), "Leuchtmittel") !== false  && in_array($cat->getId(), $categoryIds)){
-							$isIlluminant = true;
-						}
-						if(strpos($cat->getName(), "Leuchten") !== false  && in_array($cat->getId(), $categoryIds)){
-							$isLeuchte = true;
-						}
-					}
-
-					if($isLeuchte === false){
-						// Calculate local position if no 'Leuchte'. 
-						$position = $affiliatedPositions[$related_id];		
-						$related_data[$related_id] = array('position' => $position);  
-					}else{
-						$position = $affiliatedPositions[$related_id];
-						."Ist Vorschaltgerät: $isBallast, Ist Leuchtmittel: $isIlluminant, Leuchte: $isLeuchte</p>";			
-						$related_data[$related_id] = array('position' => $position);  
-					}
+			// Wenn beides Leuchten sind:
+			if($hauptKategorie == 'Leuchte' && $zubehoerElem['Kategorie'] == 'Leuchte'){
+				
+				$alleKategorienGleich = count(array_diff($zubehoerElem['system'], $lampensystem)) == 0;
+				if($alleKategorienGleich == true){
+					$zubehoerDaten[$zubehoerIdx] = array('position' => $zubehoerElem['position']);
 				}
 				
-				// If NOT 'W' or 'WW', just add.
-				if($sku_suffix !== '0'){ 
-
-					foreach($affiliatedProducts[$sys]['0'] as $index => $related_id){
-						// Skip self.
-						if($product->getEntityId() === $related_id){ continue; }
-						
-						$position = $affiliatedPositions[$related_id];
-						$related_data[$related_id] = array('position' => $position); 
-					}
-				}else{
-					// If 'W' or 'WW', just add 
-					foreach($affiliatedProducts[$sys]['w'] as $index => $related_id){
-
-						// Do not add itself to its own affiliated products.
-						if($product->getEntityId() === $related_id){ continue; }
-						
-						// Set position.
-						$position = $affiliatedPositions[$related_id];
-						$related_data[$related_id] = array('position' => $position); 
-					}
-					
-					foreach($affiliatedProducts[$sys]['ww'] as $index => $related_id){
-		
-						// Do not add itself to its own affiliated products.
-						if($product->getEntityId() === $related_id){ continue; }
-					
-						// Set position.
-						$position = $affiliatedPositions[$related_id];
-						$related_data[$related_id] = array('position' => $position); 
-					}
-				}
-			} 
-			
-			// Only update if the related products have changed.
-			$isChanged = false;
-			$relatedProducts = $product->getRelatedProducts();
-			if(!empty($relatedProducts)){
-				foreach($relatedProducts as $prod){
-					if($related_data[$prod->getId()] !== null){
-						$isChanged = true; 
-						break;
-					}
-				}	
-                
-                // Save to product if there are changes.
-                Mage::getResourceModel('catalog/product_link')->saveProductLinks(
-                    $product, $related_data, Mage_Catalog_Model_Product_Link::LINK_TYPE_RELATED
-                );
+				echo "<p><b>Systeme des aktuellen Artikels: </b>";
+				var_dump($lampensystem);
+				echo "</p><p><b>Systeme des aktuellen Zubehörs: </b>";
+				var_dump($zubehoerElem['system']);
+				echo "</p>";
+				echo "<p><b>Alle Kategorien gleich: </b>";
+				var_dump($alleKategorienGleich);
+				echo "</p><hr>";
+				
 			}else{
-				// Save to product if there are changes.
-				Mage::getResourceModel('catalog/product_link')->saveProductLinks(
-					$product, $related_data, Mage_Catalog_Model_Product_Link::LINK_TYPE_RELATED
-				);
+				
+				echo "FOUND:<ul><li>";
+				var_dump($zubehoerElem['system']);
+				echo "</li><li>";
+				var_dump($lampensystem);
+				echo "</li><li>Difference";
+				var_dump(count(array_diff($zubehoerElem['system'], $lampensystem)));
+				echo "</li></ul>";
+				
+				// Ansonsten einfach passend hinzugefügen:
+				if($farbEndung == $zubehoerElem['farbe'] && count(array_diff($zubehoerElem['system'], $lampensystem)) == 0){
+					$zubehoerDaten[$zubehoerIdx] = array('position' => $zubehoerElem['position']);
+					
+					echo "<p><b>NEU!</b></p>";
+				}				
 			}
 		}
+		
+		// Save to product if there are changes.
+		Mage::getResourceModel('catalog/product_link')->saveProductLinks(
+			$product, $zubehoerDaten, Mage_Catalog_Model_Product_Link::LINK_TYPE_RELATED
+		);
+		
+		echo "</fieldset>";
 	}
 	
-	// ------------------------------------------------------------------------------------------------------------------------------------------	
+	// ------------------------------------------------------------------------------------------------------------------	
 	
-	// Stop execution time measuring.
+	// Measure time.
 	$time = round((microtime(true) - $start), 2);
 	echo "<hr>Success! Script took <b>$time</b> seconds to execute!<hr>";
 ?>
