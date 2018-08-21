@@ -6,7 +6,7 @@
 	// Prepare magento for script execution.
 	ini_set("memory_limit","512M");
 	date_default_timezone_set("Europe/Berlin");
-	define('MAGENTO_ROOT', '/var/www/vhosts/rs213855.rs.hosteurope.de/dev3_new');
+	define('MAGENTO_ROOT', 'xxx');
 	$compilerConfig = MAGENTO_ROOT . '/includes/config.php';
 	if(file_exists($compilerConfig)){ include $compilerConfig; }
 	$mageFilename = MAGENTO_ROOT . '/app/Mage.php';
