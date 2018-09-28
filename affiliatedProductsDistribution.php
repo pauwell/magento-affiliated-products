@@ -4,16 +4,7 @@
 	echo "Script '".__FILE__."' running...<hr>";
 	
 	// Prepare magento for script execution.
-	ini_set("memory_limit","512M");
-	date_default_timezone_set("Europe/Berlin");
-	define('MAGENTO_ROOT', '/var/www/vhosts/rs213855.rs.hosteurope.de/dev3_new');
-	$compilerConfig = MAGENTO_ROOT . '/includes/config.php';
-	if(file_exists($compilerConfig)){ include $compilerConfig; }
-	$mageFilename = MAGENTO_ROOT . '/app/Mage.php';
-	require_once($mageFilename);
-	Mage::init();
-	Mage::app()->getStore()->setConfig('catalog/frontend/flat_catalog_product', 0);
-	Mage::app()->getCacheInstance()->banUse('translate');	
+	// xxx
 	
 	// Start execution-time measuring.
 	$start = microtime(TRUE);
@@ -81,9 +72,7 @@
 					$hauptKategorie = "Leuchte";
 					$position = $lichtstrom;
 					if(is_numeric($position) === FALSE){
-						//echo "<b>Changed Position from $position to ";
 						$position = strtok($lichtstrom, '/');
-						//echo "$position</b>";
 					}
 				}else if(stripos("-".$katElem->getName(), "kabel")){
 					$hauptKategorie = "Kabel";
@@ -142,6 +131,29 @@
 			$tmp = explode('(', $ausgangsspannungText);
 			$ausgangsspannungText = ($tmp[0]).trim();
 		}
+		
+		if($kabelsystemIstGesetzt == TRUE){
+			if($betriebsspannungText.trim() != ""){
+				// Hat Betriebsspannung.
+				if($ausgangsspannungText.trim() == ""){
+					// An dieser Stelle die Spannung des gesetzten Kabelsystems auslesen und der Ausgangsspannung zuweisen.
+					$neu = explode('(', end($kabelsystemeTexte));
+					$neu = $neu[1];
+					$neu = substr($neu, 0, strlen($neu) - 1);
+					//echo "Neue Ausgangsspannung => $neu";
+					$ausgangsspannungText = $neu;
+				}
+			}else{
+				
+				// An dieser Stelle die Spannung des gesetzten Kabelsystems auslesen und der Betriebsspannung zuweisen.
+				$neu = explode('(', end($kabelsystemeTexte));
+				$neu = $neu[1];
+				$neu = substr($neu, 0, strlen($neu) - 1);
+				//echo "Neue Betriebsspannung => $neu";
+				$betriebsspannungText = $neu;
+			}
+		}
+		
 					
 		// Speichere die Werte in den neuen Zubehör-Artikeln.
 		$neueZubehoerArtikel[$productId] = Array(
@@ -182,9 +194,10 @@
 		// Ist kein Standardartikel.
 		if(/*substr($_product->getSku(), 0, 3) == "SET" || */strpos($_product->getSku(), 'x') !== FALSE || strpos($_product->getSku(), 'V') !== FALSE){
 			continue;
-		}
-
+		}			
+		
 		$product = Mage::getModel('catalog/product')->setStoreId(0)->load($productId);	// Richtiger Artikel.
+		
 		
 		// Eckdaten.
 		$sku = $_product->getSku();										// SKU
@@ -271,14 +284,12 @@
 			$ausgangsspannungText = ($tmp[0]).trim();
 		}
 		
-		//echo "Zubehörzuordnung für Artikel ".$product->getSku()." [$productId]!\tVorgang zu ".intval($productIndex / 7072 * 100) ."% abgeschlossen!\n";
-		
 		// Alle Zubehörartikel durchgehen.
 		$zubehoerDaten = array();
 		foreach($neueZubehoerArtikel as $zubehoerIdx => $zubehoerElem){
 
 			// Überspringe wenn es der selbe Artikel ist.
-			if($productId == $zubehoerIdx){ 
+			if($productId == $zubehoerIdx){  
 				continue;
 			}
 			
@@ -289,7 +300,18 @@
 			$kabelsystemeUeberschneidungen = array_intersect($kabelsystemeTexte, $zubehoerElem['kabelsysteme']);
 			$fassungenUeberschneidungen = array_intersect($fassungenTexte, $zubehoerElem['fassungen']);
 			$sonstigeZuordnungenUeberschneidungen = array_intersect($sonstigeZuordnungenTexte, $zubehoerElem['sonstigeZuordnungen']);
-			$sockelPasstZuFassungen = $sockelText != FALSE && $zubehoerElem["sockel"] != FALSE && (in_array($zubehoerElem['sockel'], $fassungenTexte) || in_array($sockelText, $zubehoerElem['fassungen']));	
+			//$sockelPasstZuFassungen = ($sockelText != FALSE || $zubehoerElem["sockel"] != FALSE) && (in_array($zubehoerElem['sockel'], $fassungenTexte) || in_array($sockelText, $zubehoerElem['fassungen']));	
+			// REWRITE:
+			$sockelPasstZuFassungen = (
+				$sockelText != FALSE && 
+				$zubehoerDaten['fassungen'][0] != FALSE &&
+				in_array($sockelText, $zubehoerElem['fassungen']) != FALSE
+			)||(
+				$fassungenTexte[0] != FALSE && 
+				$zubehoerElem['sockel'] != FALSE &&
+				in_array($zubehoerElem['sockel'], $fassungenTexte) != FALSE
+			);
+			
 			$kabelsystemePassend = count($kabelsystemeUeberschneidungen) > 0;
 			
 			// Zuordnung der Zubehör-Artikel zu den Ausgangs-Artikeln. 
@@ -299,6 +321,39 @@
 			if((in_array('Thor (24V DC)', $kabelsystemeTexte) == TRUE || in_array('Thor (24V DC)', $zubehoerElem['kabelsysteme']) == TRUE) &&
 			($zubehoerElem['lampensystem'] == "SABIK" ||  $zubehoerElem['lampensystem'] == "SIRIS")){
 				continue;
+			}
+			
+			// zugeordnet wenn der Sockel/Fassung des einen, zur Sockel/Fassung des Anderen passt.
+			if($sockelPasstZuFassungen == TRUE){
+				
+				// Wenn sich der Artikel als passendes Zubehör herausstellt, füge ihm den Zubehör-Daten hinzu.
+				$zubehoerDaten[$zubehoerIdx] = array('position' => $zubehoerElem['position']);
+			}
+			
+			// ACHTUNG! Könnte Probleme geben, weil die Artikel zum Teil nur über das System zugeordnet werden.
+			if($kabelsystemIstGesetzt == TRUE){
+					
+				echo "$productId -> Kabelsystem gesetzt!\n";
+					
+				if($betriebsspannungText.trim() != ""){
+					// Hat Betriebsspannung.
+					if($ausgangsspannungText.trim() == ""){
+						// An dieser Stelle die Spannung des gesetzten Kabelsystems auslesen und der Ausgangsspannung zuweisen.
+						$neu = explode('(', end($kabelsystemeTexte));
+						$neu = $neu[1];
+						$neu = substr($neu, 0, strlen($neu) - 1);
+						echo "Neue Ausgangsspannung => $neu";
+						$ausgangsspannungText = $neu;
+					}
+				}else{
+					
+					// An dieser Stelle die Spannung des gesetzten Kabelsystems auslesen und der Betriebsspannung zuweisen.
+					$neu = explode('(', end($kabelsystemeTexte));
+					$neu = $neu[1];
+					$neu = substr($neu, 0, strlen($neu) - 1);
+					echo "Neue Betriebsspannung => $neu";
+					$betriebsspannungText = $neu;
+				}
 			}
 			
 			// -------------------------------------------------------------------------------------------------------------------
@@ -322,7 +377,9 @@
 							// Vergleiche Lichtstrom und Abstrahlwinkel wenn diese nicht null sind.
 							$istZubehoer = ($lichtstrom == $zubehoerElem['lichtstrom'] && $abstrahlwinkel == $zubehoerElem['abstrahlwinkel']);
 						}
-					}						
+					}
+				
+					// @Todo: Gartenpoller: Wenn EU Stecker an der Leuchte, dann allen Artikeln mit EU Steckdose zuordnen!							
 
 				} 
 				// Zubehör: Lampe. ✔
@@ -341,29 +398,29 @@
 						
 						if($kabelsystemePassend == TRUE){
 							$istZubehoer = TRUE;
-							echo "\nIst Zubehör, weil der Zubehör-Artikel zur Leuchte ein Vorschaltgerät ist, die Ausgangsspannung zur Betriebsspannung passt oder die Ausgangsspannung zur Ausgangsspannung wenn diese gesetzt ist!";
+							//echo "\nIst Zubehör, weil der Zubehör-Artikel zur Leuchte ein Vorschaltgerät ist, die Ausgangsspannung zur Betriebsspannung passt oder die Ausgangsspannung zur Ausgangsspannung wenn diese gesetzt ist!";
 						}else{
 							if(in_array('2-Adrig', $kabelsystemeTexte)){
 								if(in_array('2-Adrig', $zubehoerElem['kabelsysteme']) || in_array('3-Adrig', $zubehoerElem['kabelsysteme'])){
-									echo "\nIst Zubehör, weil der Zubehör-Artikel zur Leuchte ein Vorschaltgerät ist, die Ausgangsspannung zur Betriebsspannung passt oder die Ausgangsspannung zur Ausgangsspannung wenn diese gesetzt ist und der Artikel 2-Adrig und das Zubehör 2/3-Adrig!";
+									//echo "\nIst Zubehör, weil der Zubehör-Artikel zur Leuchte ein Vorschaltgerät ist, die Ausgangsspannung zur Betriebsspannung passt oder die Ausgangsspannung zur Ausgangsspannung wenn diese gesetzt ist und der Artikel 2-Adrig und das Zubehör 2/3-Adrig!";
 									$istZubehoer = TRUE;
 								}
 							}else if(in_array('3-Adrig', $kabelsystemeTexte)){
 								if(in_array('3-Adrig', $zubehoerElem['kabelsysteme'])){
-									echo "\nIst Zubehör, weil der Zubehör-Artikel zur Leuchte ein Vorschaltgerät ist, die Ausgangsspannung zur Betriebsspannung passt oder die Ausgangsspannung zur Ausgangsspannung wenn diese gesetzt ist und der Artikel 3-Adrig und das Zubehör 3-Adrig!";
+									//echo "\nIst Zubehör, weil der Zubehör-Artikel zur Leuchte ein Vorschaltgerät ist, die Ausgangsspannung zur Betriebsspannung passt oder die Ausgangsspannung zur Ausgangsspannung wenn diese gesetzt ist und der Artikel 3-Adrig und das Zubehör 3-Adrig!";
 									$istZubehoer = TRUE;
 								}
 							}else{
-								echo "\nKEIN Zubehör, weil das Vorschaltgerät nicht per Spannung oder System zur Leuchte passt.";
+								//echo "\nKEIN Zubehör, weil das Vorschaltgerät nicht per Spannung oder System zur Leuchte passt.";
 							}
 						}
 					}
 				}
 				// Zubehör: Kabel. ✔
 				else if($zubehoerElem['kategorie'] == 'Kabel'){ 
-
-					if($kabelsystemIstGesetzt == TRUE || $zubehoerElem['kabelsystemIstGesetzt'] == TRUE){
-						if($kabelsystemePassend == TRUE && $zubehoerElem['kabelsystemePassend'] == TRUE){
+				
+					if($kabelsystemIstGesetzt == TRUE && $zubehoerElem['kabelsystemIstGesetzt'] == TRUE){
+						if($kabelsystemePassend == TRUE){
 							//echo "\nIst Zubehör, weil der Zubehör-Artikel zur Leuchte ein Kabel ist und sich das Kabelsystem deckt!";
 							$istZubehoer = TRUE;
 						}
@@ -382,34 +439,38 @@
 							//echo "\nKEIN Zubehör, weil weder das Kabelsystem noch die Adrigkeit zur Leuchte passt!";
 						}
 					}
+					
+					// Wenn als Zubehör definiert wurde, vergleiche Spannung ein letztes mal.
+					if($istZubehoer == TRUE){
+						if($betriebsspannungText != $zubehoerElem['ausgangsspannung'] &&
+							$ausgangsspannungText != $zubehoerElem['betriebsspannung']){
+							$istZubehoer = FALSE;
+							echo "AUSGANGS-/BETRIEBSSPANNUNG WEICHT AB!\n";
+						}
+					}
 				}
 				// Zubehör: Muffe.
 				else if($zubehoerElem['kategorie'] == "Muffe"){
 					
 					// Durchmesser des Leuchtenkabels muss zum Durchmesser der Muffen passsen!
 					if($kabelsystemIstGesetzt == FALSE && ($zubehoerElem['geeignetfuerkabeldurchmesser']).trim() != "" && $kabeldurchmesser != NULL){
-						$splitParts = split('-', $zubehoerElem['geeignetfuerkabeldurchmesser']);
+						$splitParts = explode('-', $zubehoerElem['geeignetfuerkabeldurchmesser']);
 						
 						$a = intval($splitParts[0]);
 						$b = intval($splitParts[1]);
 						
 						if($kabeldurchmesser >= $a && $kabeldurchmesser <= $b){
 							$istZubehoer = TRUE;
-							echo "\nKabel($sku) -> Muffe({$zubehoerElem['sku']}) [Weil der Durchmesser des Kabels zum 'geeigneten' Durchmesser der Muffe passt!]";
+							//echo "\nKabel($sku) -> Muffe({$zubehoerElem['sku']}) [Weil der Durchmesser des Kabels zum 'geeigneten' Durchmesser der Muffe passt!]";
 						}
 					}
 				}
 				// Zubehör: Sonstiges.
 				else if($zubehoerElem['kategorie'] == "Sonstiges"){
-					
-					if(count($sonstigeZuordnungenUeberschneidungen) > 0){
+					// Wenn es entweder sonstige Überschneidungen gibt, oder die Kabelsysteme gesetzt sind und sich mindestens eins deckt.
+					if($sonstigeZuordnungenUeberschneidungen[0] != FALSE || ($kabelsystemIstGesetzt == TRUE && $zubehoerElem['kabelsystemIstGesetzt'] == TRUE && $kabelsystemePassend == TRUE)){
 						$istZubehoer = TRUE;
 					}
-					
-					// Kabel/Lampensystem ignorieren bei Sonstiges ?
-					/*if($lampensystemGleich == TRUE || ($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE)){
-						$istZubehoer = TRUE;
-					}*/
 				}
 			}
 			// -------------------------------------------------------------------------------------------------------------------
@@ -463,10 +524,6 @@
 				
 				// Zubehör: Leuchte.
 				if($zubehoerElem['kategorie'] == 'Leuchte'){ // ✔
-
-					// XXXX DIE ABFRAGE STIMMT ABER KOMMT NICHT DURCH!
-					
-					// FOLGENDE ÜBERARBEITET =>
 					
 					if(($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE) || $lampensystemGleich == TRUE){
 						$istZubehoer = TRUE;
@@ -533,7 +590,7 @@
 					
 					// Durchmesser des Kabels muss zum Durchmesser der Muffen passsen!
 					if(($zubehoerElem['geeignetfuerkabeldurchmesser']).trim() != "" && $kabeldurchmesser != NULL){
-						$splitParts = split('-', $zubehoerElem['geeignetfuerkabeldurchmesser']);
+						$splitParts = explode('-', $zubehoerElem['geeignetfuerkabeldurchmesser']);
 						
 						$a = intval($splitParts[0]);
 						$b = intval($splitParts[1]);
@@ -551,6 +608,13 @@
 					if($kabelsystemIstGesetzt == TRUE && $zubehoerElem['kabelsystemIstGesetzt'] == TRUE && $kabelsystemePassend == TRUE){
 						$istZubehoer = TRUE;
 						//echo "\nKabel($sku) -> Fassung({$zubehoerElem['sku']}) [Weil das Kabelsystem übereinstimmt!]";
+					}
+				}
+				// Zubehör: Sonstiges.
+				else if($zubehoerElem['kategorie'] == "Sonstiges"){
+					if($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE){
+						$istZubehoer = TRUE;
+						//echo "\nKabel($sku) -> Sonstiges({$zubehoerElem['sku']}) [Weil das Kabelsystem gesetzt ist und übereinstimmt!]";
 					}
 				}
 			}
@@ -609,7 +673,7 @@
 					
 					// Durchmesser des Vorschaltgerätekabels muss zum Durchmesser der Muffen passsen!
 					if(($zubehoerElem['geeignetfuerkabeldurchmesser']).trim() != "" && $kabeldurchmesser != NULL){
-						$splitParts = split('-', $zubehoerElem['geeignetfuerkabeldurchmesser']);
+						$splitParts = explode('-', $zubehoerElem['geeignetfuerkabeldurchmesser']);
 						
 						$a = intval($splitParts[0]);
 						$b = intval($splitParts[1]);
@@ -642,7 +706,7 @@
 					
 					// Muffe auf Kabel, wenn der Durchmesser passt und die Adrigkeit.
 					if(($geeignetfuerkabeldurchmesser).trim() != "" && ($zubehoerElem['kabeldurchmesser']).trim() != ""){
-						$splitParts = split('-', $geeignetfuerkabeldurchmesser);
+						$splitParts = explode('-', $geeignetfuerkabeldurchmesser);
 						
 						$a = intval($splitParts[0]);
 						$b = intval($splitParts[1]);
@@ -659,7 +723,6 @@
 			// -------------------------------------------------------------------------------------------------------------------
 			else if($hauptKategorie == 'Fassung'){
 				
-				
 				// Lampen hinzufügen, wenn die Fassung zum Sockel passt!!!
 				if($zubehoerElem['kategorie'] == 'Lampe'){ // ✔
 					if(count($fassungenTexte) > 0 && $sockelPasstZuFassungen == TRUE){
@@ -671,9 +734,9 @@
 				else if($zubehoerElem['kategorie'] == "Fassung"){ // ✔
 
 					// Sockel -> Fassung
-					if(count($fassungenTexte) > 0 && $sockelPasstZuFassungen === TRUE || count($fassungenUeberschneidungen) > 0){
-						echo "Ist Zubehör, weil der Zubehör-Artikel zur Fassung eine Fassung ist, das System gleich ist und die Lichtfarbe passt!";
-						$istZubehoer = TRUE;			
+					if(count($fassungenTexte) > 0 && ($sockelPasstZuFassungen === TRUE || count($fassungenUeberschneidungen) > 0)){
+						//echo "Ist Zubehör, weil der Zubehör-Artikel zur Fassung eine Fassung ist, das System gleich ist und die Lichtfarbe passt!";
+						$istZubehoer = TRUE;		
 					}
 
 				}
@@ -707,7 +770,7 @@
 			// - Sonstiges 
 			// -------------------------------------------------------------------------------------------------------------------
 			else if($hauptKategorie == "Sonstiges"){
-				
+
 				// Zubehör: Sonstiges.
 				if($zubehoerElem['kategorie'] == "Sonstiges"){
 					if($lampensystemGleich == TRUE || ($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE)){
@@ -722,6 +785,7 @@
 			}
 		}
 		
+		
 		// Speichere Änderungen in die Datenbank.
 		Mage::getResourceModel('catalog/product_link')->saveProductLinks(
 			$product, $zubehoerDaten, Mage_Catalog_Model_Product_Link::LINK_TYPE_RELATED
@@ -731,44 +795,8 @@
 	// ------------------------------------------------------------------------------------------------------------------	
 	
 	// Measure time.
-	$time = round((microtime(TRUE) - $start), 2);
+	$time_end = microtime(true) - $start;
+	$time = round($time_end, 2);
 	echo "<hr>Success! Script took <b>$time</b> seconds to execute!<hr>";
-	
-	// Debug print:
-	/*echo "Beginne vergleich zwischen => \nAusgangsartikel [$productId] ".$product->getSku()." mit Zubehöranwärter [$zubehoerIdx]".$zubehoerElem['sku']."\n";
-	echo "Lampensysteme: $lampensystem => ". $zubehoerElem['lampensystem']."\n";
-	echo "Kabelsysteme:\n\t\t[". join(", ", $kabelsystemeTexte) . "]\n\t\t[" . join(", ", $zubehoerElem['kabelsysteme'])."]\n";
-	echo "Kabelsystem ist Gesetzt: " . $kabelsystemIstGesetzt == TRUE ? "YES" : "NO" . " => " . $zubehoerElem['kabelsystemIstGesetzt'] == TRUE ? "YES" : "NO" . "\n";
-	echo "Kabelsysteme passend: " . $kabelsystemePassend == TRUE ? "YES\n" : "NO\n";
-	echo "Sonstige Zuordnungen:\n\t\t[". join(", ", $sonstigeZuordnungenTexte) . "]\n\t\t[" . join(", ", $zubehoerElem['sonstigeZuordnungen'])."]\n";
-	echo "Position: $position => ". $zubehoerElem['position'] . "\n";
-	echo "Farbe: $farbEndung => ". $zubehoerElem['farbe'] . "\n";
-	echo "Sockel: $sockel => ". $zubehoerElem['sockel'] . "\n";
-	echo "Fassungen:\n\t\t[". join(", ", $fassungenTexte) . "]\n\t\t[" . join(", ", $zubehoerElem['fassungen'])."]\n";
-	echo "Anschluss: $anschlussText => ". $zubehoerElem['anschluss'] . "\n";
-	echo "Betriebsspannung: $betriebsspannungText => ". $zubehoerElem['betriebsspannung'] . "\n";
-	echo "Ausgangsspannung: $ausgangsspannungText => ". $zubehoerElem['ausgangsspannung'] . "\n";
-	echo "Durchmesser des Leuchtenkabels: $kabeldurchmesser\n";
-	echo "Geeignet für Durchmesser: " . $zubehoerElem['geeignetfuerkabeldurchmesser'] . "\n";
-	echo "Austauschbares Leuchtmittel: ". ($austauschbaresLeuchtmittel ? 'True' : 'False') ."=> ". ($zubehoerElem['austauschbaresLeuchtmittel'] ? 'True' : 'False') . "\n";
-	echo "Stecker: $steckerText => ". $zubehoerElem['stecker'] . "\n";
-	echo "Kategorie: $hauptKategorie => ". $zubehoerElem['kategorie'] . "\n";
-	echo "\n----------------------------------------------------------------------------------------\n";*/
-	
-	// Steckdosen abfragen:
-	/*if(in_array("Erdspieß Steckdosen", $zubehoerElem['sonstigeZuordnungen'])){
-		// Wenn UK Stecker haben, dann allen Artikeln mit UK Steckdose zuordnen!
-		if(in_array("UK Steckdose", $zubehoerElem['kabelsysteme']) == TRUE){
-			// Vergleiche mit UK Stecker vom Poller.
-			// Kein Attribut für UK Stecker am Poller.
-			$istZubehoer = TRUE; // XXX
-		}
-		// Wenn EU Stecker haben, dann allen Artikeln mit EU Steckdose zuordnen!
-		if(in_array("EU Steckdose", $zubehoerElem['kabelsysteme']) == TRUE){
-			// Vergleiche mit EU Stecker vom Poller.
-			// Kein Attribut für EU Stecker am Poller.
-			$istZubehoer = TRUE; // XXX
-		}
-	}*/
 	
 ?>
