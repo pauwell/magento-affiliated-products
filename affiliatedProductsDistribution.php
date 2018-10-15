@@ -1,11 +1,11 @@
 <?php
-	// Starte script.
+	// Introduce script.
 	fwrite(STDOUT, "Script '".__FILE__."' running...\n");
 	
-	// Einstellungen hier (versteckt):
-	// xxx
-
-	// Starte Zeitmessung.
+	// Prepare magento for script execution.
+	// *censored* ;)
+	
+	// Start execution-time measuring.
 	$start = microtime(TRUE);
 	
 	// Sammlung aller Artikel.
@@ -14,8 +14,8 @@
 		->addAttributeToSelect('up_sell_product_grid_table')
 		->load();
 		
-	// Gesamtanzahl der Artikel.
 	$countTotalProducts = $collection->getLastItem()->getId();
+	$loadCircle = "/";
 	
 	// -- Alle Artikel durchgehen und deren Position und Typ speichern --------------------------------------------------
 	$neueZubehoerArtikel = array();
@@ -24,7 +24,7 @@
 		// Artikel aus der DB holen.
 		if($_product === "") continue;
 		$productId = $_product->getId();														
-
+		
 		// Ist kein Standardartikel.
 		if(substr($_product->getSku(), 0, 3) == "SET" || strpos($_product->getSku(), 'x') !== FALSE || strpos($_product->getSku(), 'V') !== FALSE){
 			continue;
@@ -85,13 +85,15 @@
 					$position = $ausgangsleistung;
 				}else if(stripos("-".$katElem->getName(), "fassung")){
 					$hauptKategorie = "Fassung";
-					$position = $ausgangsleistung; // @ Andere Positionierung?
+					//$position = $preis; // @ Andere Positionierung?
 				}else if(stripos("-" . $katElem->getName(), "muffe")){
 					$hauptKategorie = "Muffe";
-					$position = $ausgangsleistung; // @ Andere Positionierung?
+					//$position = $ausgangsleistung; // @ Andere Positionierung?
 				}else if(stripos("-" . $katElem->getName(), "landing")){
 					$hauptKategorie = "Landingpages";
-				}
+				}/*else if(stripos("-", $katElem->getName(), "sonstiges")){
+					$hauptKategorie = "Sonstiges";	// @ Andere Positionierung?
+				}*/
 			}
 		}
 		if(empty($hauptKategorie)){ $hauptKategorie = "Sonstiges"; }
@@ -108,6 +110,12 @@
 				array_push($alleKategorien, $katElem->getName());
 			}
 		}
+		
+		// Wenn der Artikel sowohl Leuchte als auch Fassung ist, behandle ihn als Fassung.
+		if($hauptKategorie == "Leuchte" && in_array("Fassungen", $alleKategorien) == TRUE){
+			$hauptKategorie = "Fassung";
+		}	
+		
 		
 		// Konvertiere die Werte von der Id zum richtigen Wert.
 		$kabelsystemeTexte = $product->getResource()->getAttribute('kabelsystem')->getSource()->getOptionText($kabelsysteme);
@@ -188,19 +196,26 @@
 			"alleKategorien" => $alleKategorien			// Alle Kategorien ungefiltert.
 		);
 		
-		
-		// Fortschrittsanzeige.
+		// Fortschritt.
 		system("clear");
-		fwrite(STDOUT, "Gathering affiliated products.\n");
+		fwrite(STDOUT, "Artikel zusammensuchen und formieren..\n");
 		$progress = intval(($productId/$countTotalProducts)*100);
-		fwrite(STDOUT, "[ At id: " . $productId . "\t-\t Progress: " . $progress . "%]\n");
-		$progressBar = "|";
+		$progressBar = "$loadCircle";
 		for($i=0; $i<100/3; ++$i){
-			if($i <= ($progress/3)){ $progressBar .= "-"; }
+			if($i <= ($progress/3)){ $progressBar .= "$loadCircle"; }
 			else{ $progressBar .= " "; }
 		}
-		$progressBar .= "|";
+		$progressBar .= "$loadCircle [$progress% at id $productId]";
 		fwrite(STDOUT, $progressBar);
+		
+		if($loadCircle == '/'){ $loadCircle = '-'; }
+		else if($loadCircle == '-'){ $loadCircle = '\\'; }
+		else if($loadCircle == '\\'){ $loadCircle = '|'; }
+		else if($loadCircle == '|'){ $loadCircle = '/'; }
+	}
+	
+	function istEuroStecker($st){
+		return (substr($st, 0, 3) === "BS ")  || (substr($st, 0, 4) === "Euro") || (substr($st, 0, 8) === "Konturen")  || (substr($st, 0, 6) === "SchuKo");
 	}
 	
 	// -- Alle Artikel durchgehen und die gesammelten Positionen als Zubehör hinzufügen ---------------------------------
@@ -263,10 +278,10 @@
 					$position = $ausgangsleistung;
 				}else if(stripos("-".$katElem->getName(), "muffe")){
 					$hauptKategorie = "Muffe";
-					//$position = $ausgangsleistung; // @ TODO
+					//$position = $ausgangsleistung; // @ Andere Positionierung?
 				}else if(stripos("-".$katElem->getName(), "fassung")){
 					$hauptKategorie = "Fassung";
-					//$position = $ausgangsleistung; // @ TODO
+					//$position = $ausgangsleistung; // @ Andere Positionierung?
 				}
 			}
 		}
@@ -282,14 +297,14 @@
 		$betriebsspannungText = $product->getResource()->getAttribute('betriebsspannung')->getSource()->getOptionText($betriebsspannung);
 		$ausgangsspannungText = $product->getResource()->getAttribute('ausgangsspannung')->getSource()->getOptionText($ausgangsspannung);
 		$steckerText = $product->getResource()->getAttribute('stecker')->getSource()->getOptionText($stecker);
-
+		
 		// Konvertiere zu array auch wenn es nur ein Element gibt.
 		if(is_array($kabelsystemeTexte) == FALSE){ $kabelsystemeTexte = Array($kabelsystemeTexte); }
 		if(is_array($sonstigeZuordnungenTexte) == FALSE){ $sonstigeZuordnungenTexte = Array($sonstigeZuordnungenTexte); }
 		if(is_array($fassungenTexte) == FALSE){ $fassungenTexte = Array($fassungenTexte); }
 		if(is_array($geeignetFuerBauformTexte) == FALSE){ $geeignetFuerBauformTexte = Array($geeignetFuerBauformTexte); }
 		
-		// Hat der Artikel Kabelsysteme gesetzt?
+		// Hat der Artikel mehr Kabelsysteme gesetzt als nur die Adrigkeit.
 		$kabelsystemIstGesetzt = FALSE;
 		foreach($kabelsystemeTexte as $kabSys){
 			if($kabSys != "2-Adrig" && $kabSys != "3-Adrig" && $kabSys != false){
@@ -376,9 +391,11 @@
 				}
 			}
 		
-			// Whitespaces abschneiden.
+			// Cut off leading + trailing whitespaces.
 			if(is_string($ausgangsspannungText) == TRUE){ $ausgangsspannungText = trim($ausgangsspannungText); }
-			if(is_string($betriebsspannungText) == TRUE){ $betriebsspannungText = trim($betriebsspannungText); }		
+			if(is_string($betriebsspannungText) == TRUE){ $betriebsspannungText = trim($betriebsspannungText); }	
+
+			
 			
 			// -------------------------------------------------------------------------------------------------------------------
 			// - Hauptkategorie: Leuchte
@@ -420,6 +437,18 @@
 							$istZubehoer = TRUE;
 						}
 					}
+				}
+				// Zubehör: Fassung.
+				else if($zubehoerElem['kategorie'] == 'Fassung'){
+					
+					
+					
+					// XXX 11.10.18
+					if($zubehoerElem['sockel'] != FALSE && in_array($zubehoerElem['sockel'], $fassungenTexte, TRUE) == TRUE){
+						$istZubehoer = TRUE;
+					}
+					
+					
 				}
 				// Zubehör: Kabel.
 				else if($zubehoerElem['kategorie'] == 'Kabel'){ 
@@ -485,9 +514,6 @@
 				// Zubehör: Vorschaltgerät.
 				else if($zubehoerElem['kategorie'] == 'Vorschaltgerät'){
 					if($betriebsspannungText == $zubehoerElem['ausgangsspannung'] || $ausgangsspannungText == $zubehoerElem['betriebsspannung']){
-						
-						// XXX Bei Lampen nur Vorschaltgeräte ohne Kabelsystem ins Zubehör.
-						// 10.10.2018
 						if($zubehoerElem['kabelsystemIstGesetzt'] == FALSE){
 							$istZubehoer = TRUE;
 						}
@@ -495,6 +521,7 @@
 				}
 				// Zubehör: Fassung.
 				else if($zubehoerElem['kategorie'] == 'Fassung'){ 	
+
 					if($sockelPasstZuFassungen == TRUE){
 						$istZubehoer = TRUE;
 					}
@@ -538,12 +565,14 @@
 							$istZubehoer = TRUE;
 						}
 					}
+					
 					if($kabelsystemIstGesetzt == FALSE && $zubehoerElem['kabelsystemIstGesetzt'] == FALSE){
 						$istZubehoer = TRUE;
 					}
 				}
 				// Zubehör: Vorschaltgerät.
 				else if($zubehoerElem['kategorie'] == 'Vorschaltgerät' ){
+					
 					if($kabelsystemIstGesetzt == TRUE && $zubehoerElem['kabelsystemIstGesetzt'] == TRUE && $kabelsystemePassend == TRUE){
 						$istZubehoer = TRUE;
 					}else if($kabelsystemIstGesetzt == FALSE){
@@ -564,6 +593,7 @@
 				}
 				// Zubehör: Muffen.
 				else if($zubehoerElem['kategorie'] == 'Muffe'){
+
 					if(($zubehoerElem['geeignetfuerkabeldurchmesser']).trim() != "" && $kabeldurchmesser != NULL){
 						$splitParts = explode('-', $zubehoerElem['geeignetfuerkabeldurchmesser']);
 						
@@ -603,20 +633,24 @@
 				}
 				// Zubehör: Kabel.
 				else if($zubehoerElem['kategorie'] == 'Kabel'){
-					if($zubehoerElem['ausgangsspannung'] == $betriebsspannungText || $zubehoerElem['betriebsspannung'] == $ausgangsspannungText){
-						if($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE){
-							$istZubehoer = TRUE;
-						}
-						else if($kabelsystemIstGesetzt == FALSE && in_array('2-Adrig', $kabelsystemeTexte)){
+					if($kabelsystemIstGesetzt == FALSE && istEuroStecker($steckerText) == FALSE){
+						if($zubehoerElem['kabelsystemIstGesetzt'] == FALSE){
 							if(in_array('2-Adrig', $zubehoerElem['kabelsysteme']) || in_array('3-Adrig', $zubehoerElem['kabelsysteme'])){
+								echo "Zubehör!!!";
 								$istZubehoer = TRUE;
 							}
-						}else if($kabelsystemIstGesetzt == FALSE && in_array('3-Adrig', $kabelsystemeTexte)){
-							if(in_array('3-Adrig', $zubehoerElem['kabelsysteme'])){
-								$istZubehoer = TRUE;							
-							}
 						}
+					} 
+					else if($kabelsystemIstGesetzt == FALSE && istEuroStecker($steckerText) == TRUE){
+						if(istEuroStecker($zubehoerElem['stecker']) == FALSE && in_array('2-Adrig', $zubehoerElem['kabelsysteme'])){
+							$istZubehoer = TRUE;
+						}
+					}else if($kabelsystemIstGesetzt == TRUE && $zubehoerElem['kabelsystemIstGesetzt'] == TRUE && $kabelsystemePassend == TRUE){
+						$istZubehoer = TRUE;
 					}
+					if(istEuroStecker($steckerText) == TRUE && istEuroStecker($zubehoerElem['stecker']) == TRUE){
+						$istZubehoer = FALSE;
+					}	
 				}
 				// Zubehör: Muffen.
 				else if($zubehoerElem['kategorie'] == 'Muffe'){
@@ -633,6 +667,7 @@
 				}
 				// Zubehör: Vorschaltgerät.
 				else if($zubehoerElem['kategorie'] == 'Vorschaltgerät'){ 
+					
 					if($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE){
 						$istZubehoer = TRUE;
 					}
@@ -709,20 +744,32 @@
 					}
 				}
 				// Zubehör: Vorschaltgerät.
-				else if($zubehoerElem['kategorie'] == "Vorschaltgerät"){ 
-					if($zubehoerElem['ausgangsspannung'] == $betriebsspannungText){
-						$istZubehoer = TRUE;
+				else if($zubehoerElem['kategorie'] == "Vorschaltgerät"){
+					
+					// XXX Abfrage von Leuchte->Vorschalt übernommen:
+					if(trim($zubehoerElem['betriebsspannung'] != "" && trim($zubehoerElem['ausgangsspannung']) != "")){
+						if($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE){
+							$istZubehoer = TRUE;
+						}
+					}
+
+					if((trim($betriebsspannungText) != "" && $betriebsspannungText == $zubehoerElem['ausgangsspannung']) || 
+					   (trim($ausgangsspannungText) != "" && $ausgangsspannungText == $zubehoerElem['betriebsspannung'])){					
+						if($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE){
+							$istZubehoer = TRUE;
+						}
 					}
 				}
 				// Zubehör: Sonstiges.
 				else if($zubehoerElem['kategorie'] == "Sonstiges"){
-					if(in_array('MR16', $zubehoerElem['geeignetFuerBauformen']) == TRUE){
-						if($sockel == "GU5.3" || in_array("GU5.3", $fassungenTexte)){
+					
+					if(in_array('MR16', $geeignetFuerBauformTexte) == TRUE){
+						if(in_array('MR16', $zubehoerElem['geeignetFuerBauformen'])){
 							$istZubehoer = TRUE;
 						}
 					}
-					if(in_array('PAR16', $zubehoerElem['geeignetFuerBauformen']) == TRUE){
-						if($sockel == "GU10" || in_array("GU10", $fassungenTexte)){
+					if(in_array('PAR16', $geeignetFuerBauformTexte) == TRUE){
+						if(in_array('PAR16', $zubehoerElem['geeignetFuerBauformen'])){
 							$istZubehoer = TRUE;
 						}
 					}
@@ -752,26 +799,35 @@
 				}
 				// Zubehör: Leuchten.
 				else if($zubehoerElem['kategorie'] == 'Leuchte'){
+					
 					if($sonstigeZuordnungenUeberschneidungen[0] != FALSE || ($kabelsystemIstGesetzt == TRUE && $zubehoerElem['kabelsystemIstGesetzt'] == TRUE && $kabelsystemePassend == TRUE)){
 						$istZubehoer = TRUE;
 					}
+					
+				}
+				// Zubehör: Kabel.
+				else if($zubehoerElem['kategorie'] == 'Kabel'){
+					if($kabelsystemIstGesetzt == TRUE && $zubehoerElem['kabelsystemIstGesetzt'] == TRUE && $kabelsystemePassend == TRUE){
+						$istZubehoer = TRUE;
+					}
+					
 				}
 				// Zubehör: Fassungen.
 				else if($zubehoerElem['kategorie'] == 'Fassung'){
 					if(in_array('MR16', $geeignetFuerBauformTexte) == TRUE){
-						if($zubehoerElem['sockel'] == "GU5.3" || in_array("GU5.3", $zubehoerElem['fassungen'])){
+						if(in_array('MR16', $zubehoerElem['geeignetFuerBauformen'])){
 							$istZubehoer = TRUE;
 						}
 					}
 					if(in_array('PAR16', $geeignetFuerBauformTexte) == TRUE){
-						if($zubehoerElem['sockel'] == "GU10" || in_array("GU10", $zubehoerElem['fassungen'])){
+						if(in_array('PAR16', $zubehoerElem['geeignetFuerBauformen'])){
 							$istZubehoer = TRUE;
 						}
 					}
 				}
 				// Zubehör: Sonstiges.
 				else if($zubehoerElem['kategorie'] == "Sonstiges"){
-					if($lampensystemGleich == TRUE || ($kabelsystemIstGesetzt == TRUE && $kabelsystemePassend == TRUE)){
+					if($sonstigeZuordnungenTexte[0] != FALSE && count($sonstigeZuordnungenTexte) > 0 && count($sonstigeZuordnungenUeberschneidungen) > 0){
 						$istZubehoer = TRUE;
 					}
 				}
@@ -787,20 +843,24 @@
 			}
 		}
 		
-		// Fortschrittsanzeige.
+	
+		// Fortschritt.
 		system("clear");
-		fwrite(STDOUT, "Gathering affiliated products.\n");
-		fwrite(STDOUT, "[ Finished\t-\t Progress: 100%]\n");
-		fwrite(STDOUT, "Add affiliated to corresponding Products.\n");
+		fwrite(STDOUT, "Artikel zusammensuchen und formieren.. Abgeschlossen ✓\n");
+		fwrite(STDOUT, "Zubehör auf die Artikel verteilen..\n");
 		$progress = intval(($productId/$countTotalProducts)*100);
-		fwrite(STDOUT, "[ At id: " . $productId . "\t-\t Progress: " . $progress . "%]\n");
-		$progressBar = "|";
+		$progressBar = "$loadCircle";
 		for($i=0; $i<100/3; ++$i){
-			if($i <= ($progress/3)){ $progressBar .= "-"; }
+			if($i <= ($progress/3)){ $progressBar .= "$loadCircle"; }
 			else{ $progressBar .= " "; }
 		}
-		$progressBar .= "|";
+		$progressBar .= "$loadCircle [$progress% at id $productId]";
 		fwrite(STDOUT, $progressBar);
+		
+		if($loadCircle == '/'){ $loadCircle = '-'; }
+		else if($loadCircle == '-'){ $loadCircle = '\\'; }
+		else if($loadCircle == '\\'){ $loadCircle = '|'; }
+		else if($loadCircle == '|'){ $loadCircle = '/'; }
 	
 		// Speichere Änderungen in die Datenbank.
 		Mage::getResourceModel('catalog/product_link')->saveProductLinks(
@@ -810,8 +870,9 @@
 	
 	// ------------------------------------------------------------------------------------------------------------------	
 	
-	// Zeitmessung.
+	// Measure time.
 	$time_end = microtime(true) - $start;
 	$time = round($time_end, 2);
-	fwrite(STDOUT, "\n\nSuccess! Script took ". intval($time/60) ."m ". intval($time % 60) ."s seconds to execute!");
+	fwrite(STDOUT, ".. Abgeschlossen ✓\n\nSuccess!\nThe script took ". intval($time/60) ."m ". intval($time % 60) ."s seconds to execute!\n\n");
+	
 ?>
